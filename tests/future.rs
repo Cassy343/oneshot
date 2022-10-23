@@ -1,6 +1,7 @@
 #![cfg(feature = "async")]
 
 use core::{future, mem, pin, task};
+use std::future::IntoFuture;
 
 #[cfg(loom)]
 pub use loom::sync::{Arc, Mutex};
@@ -42,9 +43,10 @@ fn multiple_receiver_polls_keeps_only_latest_waker() {
         let waker1 = unsafe { task::Waker::from_raw(raw_waker1) };
         let mut context1 = task::Context::from_waker(&waker1);
 
-        let (_sender, mut receiver) = oneshot::channel::<()>();
+        let (_sender, receiver) = oneshot::channel::<()>();
+        let mut receiver_fut = receiver.into_future();
 
-        let poll_result = future::Future::poll(pin::Pin::new(&mut receiver), &mut context1);
+        let poll_result = future::Future::poll(pin::Pin::new(&mut receiver_fut), &mut context1);
         assert_eq!(poll_result, task::Poll::Pending);
         assert_eq!(mock_waker1.lock().unwrap().cloned, 1);
         assert_eq!(mock_waker1.lock().unwrap().dropped, 0);
@@ -55,7 +57,7 @@ fn multiple_receiver_polls_keeps_only_latest_waker() {
         let waker2 = unsafe { task::Waker::from_raw(raw_waker2) };
         let mut context2 = task::Context::from_waker(&waker2);
 
-        let poll_result = future::Future::poll(pin::Pin::new(&mut receiver), &mut context2);
+        let poll_result = future::Future::poll(pin::Pin::new(&mut receiver_fut), &mut context2);
         assert_eq!(poll_result, task::Poll::Pending);
         assert_eq!(mock_waker2.lock().unwrap().cloned, 1);
         assert_eq!(mock_waker2.lock().unwrap().dropped, 0);
